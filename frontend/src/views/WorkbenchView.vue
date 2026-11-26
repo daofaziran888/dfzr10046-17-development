@@ -70,6 +70,11 @@
       </tbody>
     </table>
 
+    <!-- 粒度声明侧：交接副本出档、修订与补正 -->
+    <GrainHandoffPanel v-if="moduleKey === 'grain_declare'" @changed="reload" />
+    <!-- 汇总层派生侧：跨模块派生的签收待办 -->
+    <SummaryHandoffPanel v-else-if="moduleKey === 'summary_layer'" @changed="reload" />
+
     <div v-if="showCreate" class="modal-backdrop" data-testid="create-modal">
       <form class="modal" @submit.prevent="submitCreate">
         <h3>登记{{ meta.entity }}</h3>
@@ -103,6 +108,8 @@ import {
   moduleMeta,
   runAction as applyAction,
 } from '@/api/backend-service'
+import GrainHandoffPanel from '@/components/GrainHandoffPanel.vue'
+import SummaryHandoffPanel from '@/components/SummaryHandoffPanel.vue'
 import type { EntryRow } from '@/data/types'
 
 const props = defineProps<{ moduleKey: string }>()

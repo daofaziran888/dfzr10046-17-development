@@ -16,9 +16,16 @@
 │   └── vite.config.ts        dev server 配置（open: false）
 ├── backend/                  FastAPI（Python） 后端
 │   ├── app/routers/resource.py  通用查询/导出/登记/动作接口
+│   ├── app/routers/handoff.py   粒度声明交接副本：出档/签收/补正/离线材料
 │   ├── app/services/<key>.py    每个模块独立领域逻辑
+│   ├── app/services/grain_handoff.py   交接副本与汇总层签收待办领域服务
+│   ├── app/services/handoff_material.py 快照/哈希/离线凭据纯函数（无 store 依赖）
 │   ├── app/services/base.py     共享服务骨架
 │   └── app/store.py          内存数据仓库与示例数据
+├── frontend/
+│   ├── src/components/GrainHandoffPanel.vue    粒度声明侧：出档/修订/补正
+│   ├── src/components/SummaryHandoffPanel.vue  汇总层侧：签收待办采用/退回
+│   └── ...
 ├── .gitignore
 └── docker-compose.yml
 ```
@@ -80,6 +87,27 @@ npm run dev
   `frontend/src/domain/<模块>.ts`，用于承载真实业务差异并维持36题位容量。
 - 列表接口统一返回 `{ items, total, page, size }`，动作接口统一返回 `{ ok, message }`。
 - 状态流转只允许在 `app/services` 里改，路由层不做业务判断。
+
+## 粒度声明交接副本（跨模块签收流程）
+
+粒度声明原本只有普通下载，缺少给汇总人员核对、修订、签收的交付凭据。新增「声明交接副本」
+把制单员（粒度声明 `grain_declare`）与汇总员（汇总层派生 `summary_layer`）串成一条留痕流程：
+
+1. **出档**：制单员把声明当日内容冻结成不可变出档件（出档号 `HD-<声明号>-NN`，含快照与
+   内容哈希），同时在汇总层派生一单一笔「签收待办」。出档与声明编辑共用
+   `HANDOFF_LOCK`，两个修订不会拼接进同一份出档。
+2. **离线凭据**：每个出档件在出档时渲染一份自包含 HTML（内联样式、无外部依赖），可离线
+   打开；声明页和汇总页凭同一个出档号下载到的始终是同一份字节，后续修订不改变旧材料。
+3. **签收**：汇总员按声明号 + 出档号「采用」或「退回」。退回必须登记具体原因。
+4. **冲突一致规则**：汇总员已打开旧副本尚未采用、建档员又保存新版出档时，旧待办进入
+   「冲突待决」而不是被静默关闭。两边界面与执行共用同一规则——要么「采用旧口径」（新待办
+   登记去向后作废），要么「回到新副本」（旧待办登记去向后作废、新待办继续办理）。采用
+   决定只绑定一个出档号，两个版本不共享一笔决定；已采用结果始终可回查。
+5. **补正**：制单员按被退回的出档号发起补正（`FX-<声明号>-NN`），落实修订后确认，另发
+   新出档件并保留 `父出档号` 链路；一个退回件只允许一条补正链。
+
+专用接口挂在 `/api/grain-handoff/...`（见 `app/routers/handoff.py`），既有普通清单
+（`/api/grain_declare` 及其 CSV 导出）保持不变。
 
 领域：数据工程
 子方向：数仓与数据湖

@@ -29,3 +29,32 @@ class EntryPayload(BaseModel):
 class ActionPayload(BaseModel):
     action: str
     remark: str | None = None
+
+
+class HandoffIssuePayload(BaseModel):
+    declare_id: str
+    remark: str | None = None
+    operator: str | None = None
+
+
+class HandoffReturnPayload(BaseModel):
+    reason: str
+    operator: str | None = None
+
+
+class HandoffDecisionPayload(BaseModel):
+    operator: str | None = None
+
+
+class CorrectionStartPayload(BaseModel):
+    handoff_no: str
+    note: str
+    operator: str | None = None
+
+
+class CorrectionConfirmPayload(BaseModel):
+    operator: str | None = None
+
+
+class GrainEditPayload(BaseModel):
+    changes: dict[str, Any] = Field(default_factory=dict)

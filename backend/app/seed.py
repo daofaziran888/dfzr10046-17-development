@@ -4,7 +4,72 @@
 """
 from __future__ import annotations
 
+from datetime import date
 from typing import Any
+
+
+def _grain_handoff_seed_rows() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """粒度声明交接副本的演示数据。
+
+    只依赖纯函数模块 handoff_material（不触碰 app.store），避免
+    seed → store → service → store 的循环导入。一条已退回出档件（带进行中
+    的补正单，演示退回→补正→另发新件链路），以及一条待签收出档件。
+    """
+    from app.services.handoff_material import (
+        CORRECTION_DRAFT,
+        DISPATCH_RETURNED,
+        TODO_PENDING,
+        TODO_RETURNED,
+        build_dispatch_record,
+        build_snapshot,
+    )
+
+    today = date.today().isoformat()
+
+    def snapshot(declare_id: str) -> dict[str, str]:
+        declaration = next(
+            (row for row in SEED_ROWS["grain_declare"] if row.get("声明编号") == declare_id),
+            None,
+        )
+        if declaration is None:
+            return {}
+        return build_snapshot(declaration)
+
+    returned = build_dispatch_record(
+        handoff_no="HD-GRN-001-01", declare_id="GRN-001", revision=1,
+        snapshot=snapshot("GRN-001"), parent_no="", issued_at=today, next_id=1,
+    )
+    returned["todo_status"] = TODO_RETURNED
+    returned["status"] = TODO_RETURNED
+    returned["pending"] = False
+    returned["abnormal"] = True
+    returned["dispatch_status"] = DISPATCH_RETURNED
+    returned["退回原因"] = "维度组合缺少渠道维度，汇总口径无法对齐"
+    returned["签收人"] = "汇总员_演示"
+    returned["决定时间"] = today
+    returned["制单员"] = "制单员_演示"
+
+    pending = build_dispatch_record(
+        handoff_no="HD-GRN-002-01", declare_id="GRN-002", revision=1,
+        snapshot=snapshot("GRN-002"), parent_no="", issued_at=today, next_id=2,
+    )
+    pending["制单员"] = "制单员_演示"
+
+    corrections = [{
+        "id": 1,
+        "status": CORRECTION_DRAFT,
+        "pending": True,
+        "abnormal": False,
+        "补正编号": "FX-GRN-001-01",
+        "父出档号": "HD-GRN-001-01",
+        "声明编号": "GRN-001",
+        "补正说明": "补充渠道维度并重新核对度量可加性",
+        "新出档号": "",
+        "制单员": "制单员_演示",
+        "创建时间": today,
+    }]
+    return [returned, pending], corrections
+
 
 SEED_ROWS: dict[str, list[dict[str, Any]]] = {
     "dim_entry": [
@@ -380,3 +445,9 @@ SEED_ROWS: dict[str, list[dict[str, Any]]] = {
          "生效版本": "v0", "最近核对": "2026-09-01"},
     ],
 }
+
+# 交接副本与补正单的演示数据在 SEED_ROWS 之后构造，复用领域服务的快照、
+# 内容哈希与离线材料渲染逻辑，保证种子数据与运行时数据结构一致。
+_grain_handoff_rows, _grain_correction_rows = _grain_handoff_seed_rows()
+SEED_ROWS["grain_handoff"] = _grain_handoff_rows
+SEED_ROWS["grain_correction"] = _grain_correction_rows
